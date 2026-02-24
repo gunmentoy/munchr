@@ -18,7 +18,7 @@ load_dotenv()
 
 def summarize_restaurant(restaurant_name: str, menu_text: str) -> dict:
     """
-    Use Google Gemini 1.5 Flash to analyse scraped menu text and return
+    Use Google Gemini 2.5 Flash to analyse scraped menu text and return
     a structured summary with dish recommendations and practical info.
 
     Args:
@@ -80,7 +80,7 @@ Return ONLY the JSON object. No extra text, no markdown code fences."""
     # Step 3: Send the prompt to Gemini
     # ------------------------------------------------------------------
     try:
-        # Use Gemini 2.0 Flash Lite — current free tier model
+        # Use Gemini 2.5 Flash Lite — current free tier model
         # Generate the response with a temperature of 0.7 for balanced creativity
         response = client.models.generate_content(
             model="gemini-2.5-flash-lite",
