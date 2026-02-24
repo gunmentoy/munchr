@@ -6,10 +6,12 @@ stores them in a local SQLite database, and provides search/retrieval functions.
 
 import json
 import os
+import re
 import sqlite3
 import time
 
 import requests
+from bs4 import BeautifulSoup
 from recipe_scrapers import scrape_html
 
 
@@ -165,6 +167,79 @@ def bulk_scrape(url_list: list[str]) -> int:
 
     print(f"\n✅ Done! Stored {stored_count} new recipes out of {len(url_list)} URLs.")
     return stored_count
+
+
+# ---------------------------------------------------------------------------
+# Live AllRecipes Search
+# ---------------------------------------------------------------------------
+
+def search_allrecipes_live(query: str, max_results: int = 12) -> list[dict]:
+    """
+    Search AllRecipes.com in real-time, scrape the results, store them
+    in the local database, and return them.
+
+    This makes the app behave like searching the actual AllRecipes website.
+    Every recipe found is cached in the SQLite DB so repeated searches are
+    faster and work offline.
+
+    Args:
+        query: The search term (e.g. "szechuan chicken").
+        max_results: Maximum number of recipes to scrape from search results.
+
+    Returns:
+        A list of recipe dicts.
+    """
+    search_url = f"https://www.allrecipes.com/search?q={requests.utils.quote(query)}"
+
+    try:
+        resp = requests.get(search_url, headers=HEADERS, timeout=15)
+        resp.raise_for_status()
+    except Exception as e:
+        print(f"  ❌ AllRecipes search request failed: {e}")
+        return []
+
+    soup = BeautifulSoup(resp.text, "lxml")
+
+    # Extract recipe URLs from the search results page.
+    # AllRecipes uses two URL formats:
+    #   New: /slug-name-recipe-12345678
+    #   Old: /recipe/12345/slug-name/
+    recipe_urls = []
+    seen = set()
+    for a_tag in soup.find_all("a", href=True):
+        href = a_tag["href"]
+        if href in seen:
+            continue
+        if re.search(r"allrecipes\.com/[\w-]+-recipe-\d+", href) or \
+           re.search(r"allrecipes\.com/recipe/\d+/", href):
+            seen.add(href)
+            recipe_urls.append(href)
+        if len(recipe_urls) >= max_results:
+            break
+
+    if not recipe_urls:
+        return []
+
+    # Scrape each recipe and store it (duplicates are skipped automatically)
+    for i, url in enumerate(recipe_urls):
+        scrape_and_store(url)
+        # Small delay between requests to be respectful
+        if i < len(recipe_urls) - 1:
+            time.sleep(1)
+
+    # Now query the local DB for matching recipes so we return full data
+    # We re-search locally because scrape_and_store already handled storage
+    conn = init_db()
+    cursor = conn.cursor()
+    placeholders = ",".join("?" for _ in recipe_urls)
+    cursor.execute(
+        f"SELECT * FROM recipes WHERE url IN ({placeholders}) ORDER BY title",
+        recipe_urls,
+    )
+    rows = cursor.fetchall()
+    conn.close()
+
+    return [_row_to_dict(row) for row in rows]
 
 
 # ---------------------------------------------------------------------------

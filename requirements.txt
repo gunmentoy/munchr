@@ -4,3 +4,4 @@ streamlit
 google-genai
 python-dotenv
 lxml
+beautifulsoup4

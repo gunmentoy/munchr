@@ -15,6 +15,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import streamlit as st
 from scraper.recipe_scraper import (
     search_recipes,
+    search_allrecipes_live,
     get_random_recipe,
     get_recipe_count,
     init_db,
@@ -171,16 +172,21 @@ else:
         key="search_bar",
     )
 
-    search_clicked = st.button("🔍 Search", type="primary", use_container_width=True)
+    search_clicked = st.button("🔍 Search AllRecipes", type="primary", use_container_width=True)
 
     if search_clicked and search_query:
+        # First check local DB for instant results
         results = search_recipes(search_query)
+
+        # If nothing local, search AllRecipes.com live
+        if not results:
+            with st.spinner(f"Searching AllRecipes.com for \"{search_query}\"..."):
+                results = search_allrecipes_live(search_query)
 
         if not results:
             st.info(
-                f"No recipes matched **\"{search_query}\"**. "
-                "Try broader terms like **chicken**, **pasta**, **soup**, or **stir fry** — "
-                "or hit 🎲 in the sidebar for a random pick!"
+                f"No recipes found for **\"{search_query}\"** on AllRecipes.com. "
+                "Try different keywords or hit 🎲 in the sidebar for a random pick!"
             )
         else:
             st.success(f"Found **{len(results)}** recipe(s)")
