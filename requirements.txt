@@ -1,6 +1,6 @@
 requests
 recipe-scrapers
 streamlit
-google-generativeai
+google-genai
 python-dotenv
 lxml
