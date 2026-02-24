@@ -190,24 +190,40 @@ def get_all_recipes() -> list[dict]:
 
 def search_recipes(query: str) -> list[dict]:
     """
-    Search recipes by title or ingredients using a case-insensitive LIKE query.
+    Search recipes by splitting the query into individual keywords and
+    matching each one (AND logic) against title, ingredients, instructions,
+    and cuisine columns.  Case-insensitive.
 
     Args:
-        query: The search term (e.g. "chicken", "pasta", "tomato soup").
+        query: The search term (e.g. "chicken", "pasta", "cajun soup").
 
     Returns:
         A list of matching recipe dicts.
     """
     conn = init_db()
     cursor = conn.cursor()
-    # Search both title and ingredients columns
-    like_pattern = f"%{query}%"
-    cursor.execute("""
-        SELECT * FROM recipes
-        WHERE title LIKE ? COLLATE NOCASE
-          OR ingredients LIKE ? COLLATE NOCASE
-        ORDER BY title
-    """, (like_pattern, like_pattern))
+
+    # Split query into individual keywords so "cajun soup" matches recipes
+    # that contain BOTH "cajun" AND "soup" anywhere in their text fields.
+    keywords = query.strip().split()
+    if not keywords:
+        conn.close()
+        return []
+
+    where_clauses = []
+    params = []
+    for kw in keywords:
+        like = f"%{kw}%"
+        where_clauses.append(
+            "(title LIKE ? COLLATE NOCASE "
+            "OR ingredients LIKE ? COLLATE NOCASE "
+            "OR instructions LIKE ? COLLATE NOCASE "
+            "OR cuisine LIKE ? COLLATE NOCASE)"
+        )
+        params.extend([like, like, like, like])
+
+    sql = f"SELECT * FROM recipes WHERE {' AND '.join(where_clauses)} ORDER BY title"
+    cursor.execute(sql, params)
     rows = cursor.fetchall()
     conn.close()
 
@@ -263,6 +279,8 @@ def _row_to_dict(row: sqlite3.Row) -> dict:
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
+    import sys
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
     # Import seed URLs and run bulk scraper
     from seeds.seed_urls import SEED_URLS
 

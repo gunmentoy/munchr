@@ -1,6 +1,6 @@
 """
 Munchr — Streamlit Web App
-Vancouver restaurant discovery, powered by AI.
+Your AI-powered cooking companion.
 
 Run with:  streamlit run app/streamlit_app.py
 """
@@ -13,158 +13,215 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import streamlit as st
-from scraper.menu_scraper import get_restaurants, is_scraping_allowed, scrape_menu_text
-from ai.gemini_summarizer import summarize_restaurant
+from scraper.recipe_scraper import (
+    search_recipes,
+    get_random_recipe,
+    get_recipe_count,
+    init_db,
+)
+from ai.gemini_assistant import suggest_substitutes
 
 
 # ---------------------------------------------------------------------------
 # Page configuration
 # ---------------------------------------------------------------------------
 st.set_page_config(
-    page_title="Munchr",
+    page_title="Munchr 🍜",
     page_icon="🍜",
-    layout="centered",
+    layout="wide",
 )
 
-# ---------------------------------------------------------------------------
-# Header
-# ---------------------------------------------------------------------------
-st.title("Munchr")
-st.markdown("**Restaurant discovery, powered by AI**")
-st.divider()
+# Ensure the database exists
+init_db()
+
 
 # ---------------------------------------------------------------------------
-# User inputs
+# Session state — tracks which recipe is being viewed
 # ---------------------------------------------------------------------------
-col1, col2 = st.columns(2)
+if "selected_recipe" not in st.session_state:
+    st.session_state.selected_recipe = None
 
-with col1:
-    neighbourhood = st.text_input(
-        "Neighbourhood",
-        value="Mount Pleasant",
-        help="Enter a Vancouver neighbourhood name (e.g. Kitsilano, Gastown, Mount Pleasant)",
-    )
 
-with col2:
-    cuisine = st.text_input(
-        "Cuisine type",
-        value="ramen",
-        help="Optional cuisine filter (e.g. ramen, italian, sushi, thai)",
-    )
+def select_recipe(recipe: dict):
+    """Set the selected recipe in session state."""
+    st.session_state.selected_recipe = recipe
 
-# Maximum restaurants to process (keeps us within Gemini free tier limits)
-MAX_RESULTS = 10
 
-search_clicked = st.button("🔍 Search", type="primary", use_container_width=True)
+def clear_selection():
+    """Return to the search view."""
+    st.session_state.selected_recipe = None
+
 
 # ---------------------------------------------------------------------------
-# Search logic
+# Sidebar
 # ---------------------------------------------------------------------------
-if search_clicked:
-    # ------------------------------------------------------------------
-    # Step 1: Query Overpass API for restaurants in the area
-    # ------------------------------------------------------------------
-    with st.spinner(f"Searching for {cuisine or 'all'} restaurants in {neighbourhood}..."):
-        restaurants = get_restaurants(neighbourhood, cuisine)
+with st.sidebar:
+    st.markdown("# 🍜 Munchr")
+    st.markdown("*Your AI-powered cooking companion*")
+    st.divider()
 
-    if not restaurants:
-        st.warning(
-            f"No restaurants found for **{cuisine or 'any cuisine'}** in **{neighbourhood}**. "
-            "Try a different neighbourhood or cuisine type."
-        )
-        st.stop()
+    # "I'm Feeling Hungry" button — loads a random recipe
+    if st.button("🎲 I'm Feeling Hungry", use_container_width=True):
+        random_recipe = get_random_recipe()
+        if random_recipe:
+            select_recipe(random_recipe)
+            st.rerun()
+        else:
+            st.warning("Database is empty! Run the seeder first.")
 
-    # Cap results to stay within Gemini free tier rate limits
-    restaurants = restaurants[:MAX_RESULTS]
+    st.divider()
 
-    st.success(f"Found **{len(restaurants)}** restaurant(s). Analysing menus with AI...")
+    # Live recipe count from the database
+    count = get_recipe_count()
+    st.caption(f"📚 Database contains **{count}** recipes")
+
+
+# ---------------------------------------------------------------------------
+# Main area — Recipe Detail View
+# ---------------------------------------------------------------------------
+if st.session_state.selected_recipe is not None:
+    recipe = st.session_state.selected_recipe
+
+    # Back button
+    if st.button("← Back to Search"):
+        clear_selection()
+        st.rerun()
+
+    # Recipe title
+    st.title(f"🍽️ {recipe['title']}")
+
+    # Recipe image
+    if recipe.get("image_url"):
+        st.image(recipe["image_url"], use_container_width=True)
+
+    # Cook time
+    if recipe.get("total_time"):
+        st.caption(f"⏱️ Total time: {recipe['total_time']} minutes")
+
+    st.divider()
+
+    # Two-column layout: ingredients (left) + instructions (right)
+    col_left, col_right = st.columns([1, 2])
+
+    with col_left:
+        st.subheader("🛒 Ingredients")
+        # Checklist — users can tick off ingredients as they cook
+        for i, ingredient in enumerate(recipe.get("ingredients", [])):
+            st.checkbox(ingredient, key=f"ing_{recipe['id']}_{i}")
+
+    with col_right:
+        st.subheader("📝 Instructions")
+        # Numbered list of steps
+        for i, step in enumerate(recipe.get("instructions", []), start=1):
+            st.markdown(f"**Step {i}.** {step}")
+
     st.divider()
 
     # ------------------------------------------------------------------
-    # Step 2: Loop through each restaurant, scrape, and summarise
+    # AI Assistant section
     # ------------------------------------------------------------------
-    for i, rest in enumerate(restaurants):
-        name = rest["name"]
-        address = rest["address"]
-        website = rest["website"]
-        osm_id = rest["osm_id"]
+    st.subheader("🤖 Ask Munchr AI")
+    st.markdown("Missing an ingredient? Ask me for a substitute...")
 
-        with st.container(border=True):
-            # Restaurant header
-            st.subheader(f"🍽️ {name}")
+    user_query = st.text_input(
+        "Your question",
+        placeholder="e.g. I don't have heavy cream, what can I use?",
+        label_visibility="collapsed",
+        key="ai_query",
+    )
 
-            if address:
-                st.caption(f"📍 {address}")
+    if st.button("💡 Get Substitute", type="primary"):
+        if not user_query:
+            st.warning("Type a question first!")
+        else:
+            with st.spinner("Asking Munchr AI..."):
+                result = suggest_substitutes(
+                    recipe_title=recipe["title"],
+                    ingredients=recipe.get("ingredients", []),
+                    user_query=user_query,
+                )
 
-            # Check if the restaurant has a website
-            if not website:
-                st.warning("No website listed on OpenStreetMap — cannot scrape menu data.")
-                continue
+            if "error" in result:
+                st.error(f"AI error: {result['error']}")
+            else:
+                # Display the substitution as a clean card
+                with st.container(border=True):
+                    st.markdown(f"### ✅ {result.get('substitute', 'N/A')}")
+                    st.markdown(f"**How much:** {result.get('ratio', 'N/A')}")
+                    st.markdown(f"**Flavour note:** {result.get('flavour_note', 'N/A')}")
+                    st.markdown(f"**💡 Tip:** {result.get('tip', 'N/A')}")
 
-            # ----------------------------------------------------------
-            # Step 2a: Check robots.txt before scraping
-            # ----------------------------------------------------------
-            if not is_scraping_allowed(website):
-                st.warning(f"Scraping blocked by robots.txt for {website}")
-                continue
+    # Source link
+    if recipe.get("url"):
+        st.markdown(f"[🔗 View original recipe on AllRecipes]({recipe['url']})")
 
-            # ----------------------------------------------------------
-            # Step 2b: Scrape menu text from the website
-            # ----------------------------------------------------------
-            with st.spinner(f"Scraping {name}'s website..."):
-                menu_text = scrape_menu_text(website)
 
-            if not menu_text:
-                st.warning("Could not extract any text from the restaurant's website.")
-                continue
+# ---------------------------------------------------------------------------
+# Main area — Search View (default)
+# ---------------------------------------------------------------------------
+else:
+    st.title("Munchr 🍜")
+    st.markdown("**Search a recipe or get a random one**")
 
-            # ----------------------------------------------------------
-            # Step 2c: Send to Gemini for AI summarisation
-            # ----------------------------------------------------------
-            with st.spinner(f"Asking AI to analyse {name}'s menu..."):
-                summary = summarize_restaurant(name, menu_text)
+    # Search bar
+    search_query = st.text_input(
+        "Search recipes",
+        placeholder="e.g. chicken pasta, tomato soup, stir fry...",
+        label_visibility="collapsed",
+        key="search_bar",
+    )
 
-            # ----------------------------------------------------------
-            # Step 2d: Display the AI summary
-            # ----------------------------------------------------------
-            if "error" in summary:
-                st.error(f"AI analysis failed: {summary['error']}")
-                continue
+    search_clicked = st.button("🔍 Search", type="primary", use_container_width=True)
 
-            # Vibe & Price Range
-            vibe = summary.get("vibe", "No vibe info available.")
-            price = summary.get("price_range", "?")
-            st.markdown(f"**Vibe:** {vibe}")
-            st.markdown(f"**Price range:** {price}")
+    if search_clicked and search_query:
+        results = search_recipes(search_query)
 
-            # Top dishes as a bullet list
-            top_dishes = summary.get("top_dishes", [])
-            if top_dishes:
-                st.markdown("**🥢 Top 5 Dishes:**")
-                for dish in top_dishes:
-                    dish_name = dish.get("dish", "Unknown")
-                    description = dish.get("description", "")
-                    st.markdown(f"- **{dish_name}** — {description}")
+        if not results:
+            st.info(
+                f"No recipes matched **\"{search_query}\"**. "
+                "Try broader terms like **chicken**, **pasta**, **soup**, or **stir fry** — "
+                "or hit 🎲 in the sidebar for a random pick!"
+            )
+        else:
+            st.success(f"Found **{len(results)}** recipe(s)")
+            st.divider()
 
-            # Practical tips as a bullet list
-            tips = summary.get("practical_tips", [])
-            if tips:
-                st.markdown("**💡 Practical Tips:**")
-                for tip in tips:
-                    st.markdown(f"- {tip}")
+            # Display results as a grid of recipe cards (3 columns)
+            cols = st.columns(3)
+            for i, recipe in enumerate(results):
+                with cols[i % 3]:
+                    with st.container(border=True):
+                        # Thumbnail image
+                        if recipe.get("image_url"):
+                            st.image(recipe["image_url"], use_container_width=True)
 
-            # Link to website
-            st.markdown(f"[🌐 Visit website]({website})")
+                        # Recipe title
+                        st.markdown(f"**{recipe['title']}**")
 
-    st.divider()
+                        # Cook time
+                        if recipe.get("total_time"):
+                            st.caption(f"⏱️ {recipe['total_time']} min")
+
+                        # View Recipe button
+                        st.button(
+                            "View Recipe",
+                            key=f"view_{recipe['id']}",
+                            on_click=select_recipe,
+                            args=(recipe,),
+                            use_container_width=True,
+                        )
+
+    elif search_clicked and not search_query:
+        st.warning("Enter a search term first!")
+
 
 # ---------------------------------------------------------------------------
 # Footer
 # ---------------------------------------------------------------------------
 st.markdown(
     "<div style='text-align: center; color: grey; font-size: 0.85em; padding-top: 2rem;'>"
-    "Data sourced from <a href='https://www.openstreetmap.org/copyright'>OpenStreetMap</a> contributors "
-    "| AI powered by <a href='https://ai.google.dev/'>Google Gemini</a>"
+    "Recipes sourced from <a href='https://www.allrecipes.com'>AllRecipes.com</a> "
+    "| AI powered by <a href='https://ai.google.dev/'>Google Gemini 2.0 Flash</a>"
     "</div>",
     unsafe_allow_html=True,
 )

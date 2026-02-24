@@ -1,6 +1,6 @@
 """
 Munchr — Gemini AI Cooking Assistant Module
-Uses Google Gemini 2.0 Flash to suggest ingredient substitutions
+Uses Google Gemini 2.5 Flash to suggest ingredient substitutions
 in the context of a specific recipe being viewed.
 
 Uses the google-genai SDK.
@@ -40,7 +40,7 @@ def suggest_substitutes(recipe_title: str, ingredients: list[str], user_query: s
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
         return {"error": "GEMINI_API_KEY not found in environment variables. "
-                         "Create a .env file from .env.example and add your key."}
+                        "Create a .env file from .env.example and add your key."}
 
     # Create a Gemini client with the API key
     client = genai.Client(api_key=api_key)
@@ -74,15 +74,16 @@ Return a JSON object (and ONLY a JSON object, no markdown fences) with these exa
 Return ONLY the JSON object. No extra text, no markdown code fences."""
 
     # ------------------------------------------------------------------
-    # Step 3: Send the prompt to Gemini 2.0 Flash
+    # Step 3: Send the prompt to Gemini 2.5 Flash
     # ------------------------------------------------------------------
     try:
         response = client.models.generate_content(
-            model="gemini-2.0-flash",
+            model="gemini-2.5-flash",
             contents=prompt,
             config=types.GenerateContentConfig(
                 temperature=0.7,
-                max_output_tokens=512,
+                max_output_tokens=1024,
+                response_mime_type="application/json",
             ),
         )
 
@@ -92,7 +93,7 @@ Return ONLY the JSON object. No extra text, no markdown code fences."""
         # ------------------------------------------------------------------
         # Step 4: Parse the JSON response
         # ------------------------------------------------------------------
-        # Sometimes Gemini wraps output in ```json ... ``` fences — strip them
+        # Safety: strip markdown fences if they somehow still appear
         if raw_response.startswith("```"):
             raw_response = raw_response.split("\n", 1)[1] if "\n" in raw_response else raw_response[3:]
         if raw_response.endswith("```"):
