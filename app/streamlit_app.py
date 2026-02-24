@@ -151,6 +151,80 @@ st.markdown(f"""
         font-family: 'Roboto Mono', monospace !important;
     }}
 
+    /* ---- Custom success bar ---- */
+    .success-bar {{
+        background-color: #698F3F;
+        color: #ffffff;
+        font-family: 'Roboto Mono', monospace;
+        font-weight: 600;
+        font-size: 0.95rem;
+        padding: 0.75rem 1rem;
+        border-radius: 8px;
+        margin-bottom: 1rem;
+    }}
+
+    /* ---- Recipe result card ---- */
+    .recipe-card {{
+        background-color: {CHARCOAL};
+        color: {CREAM};
+        border-radius: 16px;
+        padding: 1rem;
+        margin-bottom: 0.75rem;
+        display: flex;
+        flex-direction: column;
+        height: 420px;
+        overflow: hidden;
+    }}
+    .recipe-card .card-img-wrap {{
+        width: 100%;
+        height: 200px;
+        border-radius: 10px;
+        overflow: hidden;
+        flex-shrink: 0;
+    }}
+    .recipe-card .card-img-wrap img {{
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+    }}
+    .recipe-card .card-body {{
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+    }}
+    .recipe-card .card-title {{
+        font-family: 'Roboto Mono', monospace;
+        font-weight: 600;
+        font-size: 0.95rem;
+        color: {CREAM};
+        margin: 0.6rem 0 0.25rem 0;
+        line-height: 1.3;
+    }}
+    .recipe-card .card-time {{
+        font-family: 'Roboto Mono', monospace;
+        font-size: 0.8rem;
+        color: {GOLD};
+        margin-bottom: 0.5rem;
+    }}
+
+    /* ---- View Recipe button inside card (Streamlit button override) ---- */
+    .card-btn-wrap .stButton > button {{
+        background-color: {CRIMSON} !important;
+        color: {CREAM} !important;
+        border: none !important;
+        border-radius: 8px !important;
+        font-family: 'Roboto Mono', monospace !important;
+        font-weight: 600 !important;
+        width: 100%;
+        transition: all 0.2s ease;
+    }}
+    .card-btn-wrap .stButton > button:hover {{
+        background-color: {GOLD} !important;
+        color: {CHARCOAL} !important;
+    }}
+
     /* ---- Checkboxes ---- */
     .stCheckbox label span {{
         font-family: 'Roboto Mono', monospace !important;
@@ -303,13 +377,6 @@ else:
         unsafe_allow_html=True,
     )
 
-    # Live recipe count
-    count = get_recipe_count()
-    st.markdown(
-        f'<p class="recipe-count">{count} recipes cached locally</p>',
-        unsafe_allow_html=True,
-    )
-
     st.markdown("")  # spacer
 
     # Search bar
@@ -356,24 +423,41 @@ else:
                 "Try different keywords!"
             )
         else:
-            st.success(f"Found **{len(results)}** recipe(s)")
-            st.divider()
+            st.markdown(
+                f'<div class="success-bar">Found {len(results)} recipe(s)</div>',
+                unsafe_allow_html=True,
+            )
 
             # 3-column recipe card grid
             cols = st.columns(3)
             for i, recipe in enumerate(results):
                 with cols[i % 3]:
-                    with st.container(border=True):
-                        if recipe.get("image_url"):
-                            st.image(
-                                recipe["image_url"], use_container_width=True
-                            )
+                    # Image HTML
+                    img_html = ""
+                    if recipe.get("image_url"):
+                        img_html = (
+                            f'<div class="card-img-wrap">'
+                            f'<img src="{recipe["image_url"]}" alt="{recipe["title"]}" />'
+                            f'</div>'
+                        )
 
-                        st.markdown(f"**{recipe['title']}**")
+                    time_html = ""
+                    if recipe.get("total_time"):
+                        time_html = f'<div class="card-time">⏱️ {recipe["total_time"]} min</div>'
 
-                        if recipe.get("total_time"):
-                            st.caption(f"⏱️ {recipe['total_time']} min")
+                    st.markdown(
+                        f'<div class="recipe-card">'
+                        f'{img_html}'
+                        f'<div class="card-body">'
+                        f'<div><div class="card-title">{recipe["title"]}</div>'
+                        f'{time_html}</div>'
+                        f'</div></div>',
+                        unsafe_allow_html=True,
+                    )
 
+                    # Button sits right below card with highlighted styling
+                    with st.container():
+                        st.markdown('<div class="card-btn-wrap">', unsafe_allow_html=True)
                         st.button(
                             "View Recipe",
                             key=f"view_{recipe['id']}",
@@ -381,6 +465,7 @@ else:
                             args=(recipe,),
                             use_container_width=True,
                         )
+                        st.markdown('</div>', unsafe_allow_html=True)
 
     elif search_clicked and not search_query:
         st.warning("Enter a search term first!")
