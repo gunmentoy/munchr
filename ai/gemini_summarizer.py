@@ -77,13 +77,13 @@ inference based on the restaurant name and whatever context is available.
 Return ONLY the JSON object. No extra text, no markdown code fences."""
 
     # ------------------------------------------------------------------
-    # Step 3: Send the prompt to Gemini 1.5 Flash
+    # Step 3: Send the prompt to Gemini
     # ------------------------------------------------------------------
     try:
-        # Use Gemini 2.0 Flash — free tier model with generous rate limits
+        # Use Gemini 2.0 Flash Lite — current free tier model
         # Generate the response with a temperature of 0.7 for balanced creativity
         response = client.models.generate_content(
-            model="gemini-2.0-flash",
+            model="gemini-2.5-flash-lite",
             contents=prompt,
             config=types.GenerateContentConfig(
                 temperature=0.7,
