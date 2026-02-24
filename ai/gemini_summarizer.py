@@ -1,12 +1,15 @@
 """
 Munchr — Gemini AI Summarizer Module
-Sends scraped restaurant menu text to Google Gemini 1.5 Flash (free tier)
+Sends scraped restaurant menu text to Google Gemini 2.0 Flash (free tier)
 and returns structured dish recommendations, vibe, tips, and price range.
+
+Uses the new google-genai SDK (the old google-generativeai package is deprecated).
 """
 
 import os
 import json
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
@@ -39,8 +42,8 @@ def summarize_restaurant(restaurant_name: str, menu_text: str) -> dict:
         return {"error": "GEMINI_API_KEY not found in environment variables. "
                         "Create a .env file from .env.example and add your key."}
 
-    # Configure the Gemini client with the API key
-    genai.configure(api_key=api_key)
+    # Create a Gemini client with the API key
+    client = genai.Client(api_key=api_key)
 
     # ------------------------------------------------------------------
     # Step 2: Build the structured prompt for Gemini
@@ -77,13 +80,12 @@ Return ONLY the JSON object. No extra text, no markdown code fences."""
     # Step 3: Send the prompt to Gemini 1.5 Flash
     # ------------------------------------------------------------------
     try:
-        # Use Gemini 1.5 Flash — free tier model with generous rate limits
-        model = genai.GenerativeModel("gemini-1.5-flash")
-
+        # Use Gemini 2.0 Flash — free tier model with generous rate limits
         # Generate the response with a temperature of 0.7 for balanced creativity
-        response = model.generate_content(
-            prompt,
-            generation_config=genai.types.GenerationConfig(
+        response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=prompt,
+            config=types.GenerateContentConfig(
                 temperature=0.7,
                 max_output_tokens=1024,
             ),

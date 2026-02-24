@@ -20,13 +20,94 @@ from urllib.robotparser import RobotFileParser
 # Overpass API — Restaurant Discovery
 # ---------------------------------------------------------------------------
 
-# The Overpass API endpoint (public, no API key required)
-OVERPASS_URL = "https://overpass-api.de/api/interpreter"
+# Overpass API endpoints (public, no API key required)
+# We use a primary + fallback server in case one is overloaded or rate-limited.
+OVERPASS_URLS = [
+    "https://overpass-api.de/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter",
+]
+
+# Maximum number of retry attempts per Overpass server
+MAX_RETRIES = 2
+
+# ---------------------------------------------------------------------------
+# Vancouver neighbourhood bounding boxes (south, west, north, east)
+# These are approximate lat/lon rectangles covering each neighbourhood.
+# Using bounding boxes is much faster and more reliable than OSM area queries,
+# because Vancouver neighbourhoods are not consistently tagged in OSM.
+# ---------------------------------------------------------------------------
+NEIGHBOURHOOD_BBOXES = {
+    "downtown":         (49.2760, -123.1350, 49.2920, -123.1050),
+    "gastown":          (49.2820, -123.1120, 49.2870, -123.0970),
+    "chinatown":        (49.2770, -123.1060, 49.2820, -123.0950),
+    "yaletown":         (49.2700, -123.1250, 49.2780, -123.1100),
+    "west end":         (49.2800, -123.1450, 49.2920, -123.1250),
+    "mount pleasant":   (49.2530, -123.1150, 49.2700, -123.0850),
+    "kitsilano":        (49.2600, -123.1750, 49.2750, -123.1350),
+    "commercial drive": (49.2560, -123.0740, 49.2750, -123.0630),
+    "main street":      (49.2430, -123.1050, 49.2650, -123.0900),
+    "hastings-sunrise": (49.2750, -123.0550, 49.2850, -123.0150),
+    "strathcona":       (49.2700, -123.0900, 49.2780, -123.0720),
+    "grandview-woodland": (49.2700, -123.0750, 49.2820, -123.0500),
+    "fairview":         (49.2600, -123.1400, 49.2720, -123.1150),
+    "south granville":  (49.2500, -123.1500, 49.2630, -123.1350),
+    "kerrisdale":       (49.2270, -123.1600, 49.2420, -123.1400),
+    "dunbar":           (49.2350, -123.1900, 49.2550, -123.1650),
+    "point grey":       (49.2600, -123.2100, 49.2750, -123.1850),
+    "riley park":       (49.2400, -123.1050, 49.2540, -123.0850),
+    "cambie":           (49.2370, -123.1250, 49.2530, -123.1050),
+    "marpole":          (49.2050, -123.1400, 49.2250, -123.1200),
+    "coal harbour":     (49.2870, -123.1300, 49.2950, -123.1100),
+    "olympic village":  (49.2660, -123.1120, 49.2730, -123.1000),
+    # Fallback: all of Vancouver
+    "vancouver":        (49.2000, -123.2500, 49.3200, -123.0200),
+}
+
+
+def _get_bbox(neighbourhood: str) -> tuple:
+    """
+    Look up the bounding box for a Vancouver neighbourhood.
+
+    Uses fuzzy matching: if the user types "mt pleasant" or "Mount Pleasant",
+    we'll match "mount pleasant" from our lookup table. Falls back to all of
+    Vancouver if no match is found.
+
+    Args:
+        neighbourhood: User-entered neighbourhood name.
+
+    Returns:
+        Tuple of (south, west, north, east) lat/lon coordinates.
+    """
+    key = neighbourhood.strip().lower()
+
+    # Exact match
+    if key in NEIGHBOURHOOD_BBOXES:
+        return NEIGHBOURHOOD_BBOXES[key]
+
+    # Partial / fuzzy match — check if the input is contained in any key or vice versa
+    for name, bbox in NEIGHBOURHOOD_BBOXES.items():
+        if key in name or name in key:
+            return bbox
+
+    # Common abbreviations
+    abbreviations = {"mt": "mount", "comm": "commercial", "e van": "hastings", "kits": "kitsilano"}
+    for abbrev, full in abbreviations.items():
+        if abbrev in key:
+            for name, bbox in NEIGHBOURHOOD_BBOXES.items():
+                if full in name:
+                    return bbox
+
+    # No match — search all of Vancouver
+    print(f"[Overpass] Neighbourhood '{neighbourhood}' not recognized, searching all of Vancouver.")
+    return NEIGHBOURHOOD_BBOXES["vancouver"]
 
 
 def get_restaurants(neighbourhood: str, cuisine: str = "") -> list[dict]:
     """
     Query the Overpass API for restaurants in a Vancouver neighbourhood.
+
+    Uses a bounding-box approach (much faster and more reliable than OSM area
+    queries, since Vancouver neighbourhoods aren't consistently tagged in OSM).
 
     Args:
         neighbourhood: Name of the Vancouver neighbourhood (e.g. "Mount Pleasant").
@@ -40,34 +121,52 @@ def get_restaurants(neighbourhood: str, cuisine: str = "") -> list[dict]:
             - osm_id (int): OpenStreetMap node/way ID
     """
 
+    # Look up the bounding box for the neighbourhood
+    south, west, north, east = _get_bbox(neighbourhood)
+    bbox = f"({south},{west},{north},{east})"
+
     # Build the cuisine filter for the Overpass query.
     # If a cuisine is provided, we add a tag filter like ["cuisine"~"ramen",i]
     # The ",i" flag makes the match case-insensitive.
     cuisine_filter = f'["cuisine"~"{cuisine}",i]' if cuisine else ""
 
-    # Overpass QL query:
-    # 1. Search for an area named "<neighbourhood>, Vancouver" (geocodeArea)
-    # 2. Inside that area, find nodes and ways tagged amenity=restaurant
-    # 3. Optionally filter by cuisine tag
-    # 4. Output body + geometry in JSON format
+    # Overpass QL query using a bounding box:
+    # 1. Search for nodes and ways tagged amenity=restaurant within the bbox
+    # 2. Optionally filter by cuisine tag
+    # 3. Output body + geometry in JSON format
     query = f"""
-    [out:json][timeout:30];
-    area["name"~"{neighbourhood}",i]["place"]->.searchArea;
-    area["name"="Vancouver"]["boundary"="administrative"]->.vanArea;
-    (
-      node["amenity"="restaurant"]{cuisine_filter}(area.searchArea)(area.vanArea);
-      way["amenity"="restaurant"]{cuisine_filter}(area.searchArea)(area.vanArea);
-    );
-    out body center;
-    """
+[out:json][timeout:25];
+(
+  node["amenity"="restaurant"]{cuisine_filter}{bbox};
+  way["amenity"="restaurant"]{cuisine_filter}{bbox};
+);
+out body center;
+"""
 
-    try:
-        # Send the query to the Overpass API
-        response = requests.get(OVERPASS_URL, params={"data": query}, timeout=30)
-        response.raise_for_status()  # Raise an error for HTTP failures
-        data = response.json()
-    except requests.RequestException as e:
-        print(f"[Overpass API Error] {e}")
+    # Try each Overpass server with retries (POST is recommended for longer queries)
+    import time
+    data = None
+    for server_url in OVERPASS_URLS:
+        for attempt in range(1, MAX_RETRIES + 1):
+            try:
+                # POST is preferred by Overpass for complex queries (avoids URL length issues)
+                response = requests.post(
+                    server_url,
+                    data={"data": query},
+                    timeout=60,  # generous timeout for slow servers
+                )
+                response.raise_for_status()
+                data = response.json()
+                break  # success — exit retry loop
+            except requests.RequestException as e:
+                print(f"[Overpass API Error] {server_url} (attempt {attempt}/{MAX_RETRIES}): {e}")
+                if attempt < MAX_RETRIES:
+                    time.sleep(2 * attempt)  # brief backoff before retry
+        if data is not None:
+            break  # got data — no need to try the fallback server
+
+    if data is None:
+        print("[Overpass API Error] All servers failed.")
         return []
 
     restaurants = []

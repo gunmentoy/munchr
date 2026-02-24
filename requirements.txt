@@ -1,7 +1,7 @@
 requests
 beautifulsoup4
 streamlit
-google-generativeai
+google-genai
 python-dotenv
 lxml
 playwright
