@@ -246,7 +246,7 @@ def scrape_menu_text(url: str) -> str:
     Strategy:
         1. First attempt with requests + BeautifulSoup (fast, lightweight).
         2. If the result is under 200 characters (likely a JS-rendered page),
-           automatically fall back to Playwright headless Chromium.
+          automatically fall back to Playwright headless Chromium.
         3. If Playwright also fails, return whatever partial text exists.
 
     Args:

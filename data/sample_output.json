@@ -1,3 +1,38 @@
 {
-  "_comment": "Sample output to be added in Stage 3"
+  "restaurant_name": "Tanpopo Ramen House",
+  "neighbourhood": "Mount Pleasant",
+  "osm_id": 1234567890,
+  "address": "123 Main St, Vancouver",
+  "website": "https://www.tanpoporamen.example.com",
+  "ai_summary": {
+    "top_dishes": [
+      {
+        "dish": "Tonkotsu Ramen",
+        "description": "Rich, creamy pork bone broth simmered for 12 hours with chashu and soft-boiled egg"
+      },
+      {
+        "dish": "Spicy Miso Ramen",
+        "description": "Bold fermented soybean broth with a fiery chili kick and ground pork"
+      },
+      {
+        "dish": "Chicken Karaage",
+        "description": "Crispy Japanese-style fried chicken, perfectly seasoned and juicy inside"
+      },
+      {
+        "dish": "Gyoza (Pan-fried)",
+        "description": "Handmade pork and cabbage dumplings with a crispy golden bottom"
+      },
+      {
+        "dish": "Matcha Soft Serve",
+        "description": "Creamy green tea ice cream — a refreshing finish to a hearty bowl"
+      }
+    ],
+    "vibe": "A cozy, no-frills ramen shop with communal seating and steamy bowls served fast.",
+    "practical_tips": [
+      "Expect a 15-20 minute wait during weekend lunch rush",
+      "Cash and card accepted, no reservations — first come first served",
+      "Street parking is limited; consider transit (Main St-Science World Station nearby)"
+    ],
+    "price_range": "$"
+  }
 }
