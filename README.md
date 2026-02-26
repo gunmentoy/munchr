@@ -6,18 +6,28 @@ Munchr is a recipe search and AI substitution assistant built with Python and St
 
 > Built for BABI 4005 — BCIT Business & Data Analytics
 
+> **Live Demo:** [munchr.streamlit.app](https://munchr.streamlit.app)
+
+---
+
+## Screenshots
+
+| Search View                          | Recipe Detail                            | AI Assistant                           |
+| ------------------------------------ | ---------------------------------------- | -------------------------------------- |
+| ![Search View](docs/search-view.png) | ![Recipe Detail](docs/recipe-detail.png) | ![AI Assistant](docs/ai-assistant.png) |
+
 ---
 
 ## Features
 
-| Feature | Description |
-|---|---|
-| **Live Recipe Search** | Search AllRecipes.com in real time. Results are scraped, parsed, and cached locally in SQLite |
-| **Local Database** | Recipes are stored after the first search so subsequent lookups are instant |
-| **"I'm Feeling Hungry"** | Click once and get a random recipe from your local collection |
-| **AI Ingredient Substitutions** | Ask Munchr AI what to use when you're missing an ingredient — powered by Google Gemini |
-| **Multi-Ingredient Support** | Ask about multiple missing ingredients at once (e.g. "I don't have cream or parmesan") |
-| **Custom UI** | Roboto Mono font, crimson/gold/cream/charcoal colour palette, responsive card grid |
+| Feature                         | Description                                                                                   |
+| ------------------------------- | --------------------------------------------------------------------------------------------- |
+| **Live Recipe Search**          | Search AllRecipes.com in real time. Results are scraped, parsed, and cached locally in SQLite |
+| **Local Database**              | Recipes are stored after the first search so subsequent lookups are instant                   |
+| **"I'm Feeling Hungry"**        | Click once and get a random recipe from your local collection                                 |
+| **AI Ingredient Substitutions** | Ask Munchr AI what to use when you're missing an ingredient — powered by Google Gemini        |
+| **Multi-Ingredient Support**    | Ask about multiple missing ingredients at once (e.g. "I don't have cream or parmesan")        |
+| **Custom UI**                   | Roboto Mono font, crimson/gold/cream/charcoal colour palette, responsive card grid            |
 
 ---
 
@@ -73,9 +83,10 @@ munchr/
 ├── ai/
 │   └── gemini_assistant.py   # Gemini AI ingredient substitution assistant
 ├── seeds/
-│   └── seed_urls.py          # 24 curated AllRecipes URLs for seeding the DB
+│   ├── seed_urls.py          # 24 curated AllRecipes URLs for starter seeding
+│   └── bulk_seed.py          # Bulk seeder — 186 search terms, ~2,000 recipes
 ├── data/
-│   └── recipes.db            # SQLite database (auto-created on first run)
+│   └── recipes.db            # SQLite database (~2,000 pre-seeded recipes)
 ├── .env                      # API key (not committed — see .env.example)
 ├── .env.example              # Template for environment variables
 ├── .gitignore
@@ -128,10 +139,18 @@ GEMINI_API_KEY=your_actual_key_here
 
 ### 5. (Optional) Seed the database
 
-Pre-load 24 curated recipes so you have data immediately:
+The repo ships with a pre-seeded database of ~2,000 recipes, so this step is only needed if you want to start fresh.
+
+Quick seed (24 curated recipes):
 
 ```bash
 python -m scraper.recipe_scraper
+```
+
+Bulk seed (~2,000 recipes across 186 diverse search terms — takes ~30 min):
+
+```bash
+python seeds/bulk_seed.py
 ```
 
 ### 6. Run the app
@@ -153,7 +172,7 @@ The app will open in your browser at `http://localhost:8501`.
 
 ## AI Use Statement
 
-This project was developed with the assistance of **GitHub Copilot (Claude Sonnet 4.6)** for code generation, debugging, and documentation. The AI assistant was used as a pair-programming tool throughout development — all code was reviewed and tested by the developer.
+This project was developed with the assistance of **GitHub Copilot (Claude Sonnet 4.6)** for debugging and documentation. The AI assistant was used as an assistant throughout development — all code was reviewed and tested by the developer.
 
 **Google Gemini 2.5 Flash** is used at runtime to generate ingredient substitution suggestions based on recipe context and user queries.
 
