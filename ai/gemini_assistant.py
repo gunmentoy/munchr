@@ -16,22 +16,19 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-def suggest_substitutes(recipe_title: str, ingredients: list[str], user_query: str) -> dict:
+def suggest_substitutes(recipe_title: str, ingredients: list[str], user_query: str) -> list[dict] | dict:
     """
-    Ask Gemini for an ingredient substitution tailored to a specific recipe.
+    Ask Gemini for ingredient substitutions tailored to a specific recipe.
+    Supports single or multiple missing ingredients in one query.
 
     Args:
         recipe_title: The name of the recipe (e.g. "Gigi Hadid Pasta").
         ingredients: The full list of ingredients for the recipe.
-        user_query: The user's question (e.g. "I don't have heavy cream, what can I use?").
+        user_query: The user's question (e.g. "I don't have olive oil and pepper").
 
     Returns:
-        A dict with keys:
-            - substitute: the recommended substitute ingredient
-            - ratio: how much to use (e.g. "use the same amount")
-            - flavour_note: one sentence on how it may change the taste
-            - tip: one practical cooking tip related to the substitution
-        On failure, returns a dict with an "error" key describing the issue.
+        A list of dicts, each with keys: substitute, ratio, flavour_note, tip.
+        On failure, returns a single dict with an "error" key.
     """
 
     # ------------------------------------------------------------------
@@ -52,7 +49,7 @@ def suggest_substitutes(recipe_title: str, ingredients: list[str], user_query: s
 
     prompt = f"""You are a friendly, knowledgeable cooking assistant called Munchr AI.
 
-A user is cooking the following recipe and needs help with an ingredient substitution.
+A user is cooking the following recipe and needs help with ingredient substitutions.
 
 **Recipe:** {recipe_title}
 
@@ -61,61 +58,80 @@ A user is cooking the following recipe and needs help with an ingredient substit
 
 **User's question:** {user_query}
 
-Based on the specific recipe and its ingredients, suggest the best substitution.
-Return a JSON object (and ONLY a JSON object, no markdown fences) with these exact keys:
+Based on the specific recipe and its ingredients, suggest the best substitution for EACH missing ingredient the user mentions.
+
+Return a JSON **array** of objects (and ONLY a JSON array, no markdown fences).
+Each object must have these exact keys:
 
 {{
-  "substitute": "The recommended substitute ingredient",
-  "ratio": "How much to use (e.g. 'use the same amount', '1/2 cup instead of 1 cup')",
+  "ingredient": "The original ingredient being replaced",
+  "substitute": "The recommended substitute",
+  "ratio": "How much to use (e.g. 'use the same amount')",
   "flavour_note": "One sentence on how the substitution may change the taste or texture.",
-  "tip": "One practical cooking tip related to this substitution in this specific recipe."
+  "tip": "One practical cooking tip for this substitution in this recipe."
 }}
 
-Return ONLY the JSON object. No extra text, no markdown code fences."""
+If the user only asks about one ingredient, return an array with one object.
+Return ONLY the JSON array. No extra text, no markdown code fences."""
 
     # ------------------------------------------------------------------
-    # Step 3: Send the prompt to Gemini 2.5 Flash
+    # Step 3: Send the prompt to Gemini (with retry on bad JSON)
     # ------------------------------------------------------------------
-    try:
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                temperature=0.7,
-                max_output_tokens=1024,
-                response_mime_type="application/json",
-            ),
-        )
+    max_attempts = 2
+    raw_response = ""
 
-        # Extract the text from the response
-        raw_response = response.text.strip()
+    for attempt in range(max_attempts):
+        try:
+            response = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    temperature=0.4 if attempt > 0 else 0.7,
+                    max_output_tokens=2048,
+                    response_mime_type="application/json",
+                ),
+            )
 
-        # ------------------------------------------------------------------
-        # Step 4: Parse the JSON response
-        # ------------------------------------------------------------------
-        # Safety: strip markdown fences if they somehow still appear
-        if raw_response.startswith("```"):
-            raw_response = raw_response.split("\n", 1)[1] if "\n" in raw_response else raw_response[3:]
-        if raw_response.endswith("```"):
-            raw_response = raw_response[:-3].strip()
+            raw_response = response.text.strip()
 
-        # Parse the cleaned JSON string into a Python dict
-        result = json.loads(raw_response)
+            # Strip markdown fences if present
+            if raw_response.startswith("```"):
+                raw_response = raw_response.split("\n", 1)[1] if "\n" in raw_response else raw_response[3:]
+            if raw_response.endswith("```"):
+                raw_response = raw_response[:-3].strip()
 
-        # Validate that expected keys are present
-        expected_keys = {"substitute", "ratio", "flavour_note", "tip"}
-        if not expected_keys.issubset(result.keys()):
-            missing = expected_keys - result.keys()
-            return {"error": f"Gemini response missing keys: {missing}",
-                    "raw_response": raw_response}
+            result = json.loads(raw_response)
 
-        return result
+            # If Gemini returned a single object instead of an array, wrap it
+            if isinstance(result, dict):
+                result = [result]
 
-    except json.JSONDecodeError as e:
-        # Gemini returned something that isn't valid JSON
-        return {"error": f"Failed to parse Gemini response as JSON: {e}",
-                "raw_response": raw_response if "raw_response" in locals() else "N/A"}
+            # Validate: ensure every item is a dict with the expected keys
+            validated = []
+            for item in result:
+                if not isinstance(item, dict):
+                    continue
+                validated.append({
+                    "ingredient": item.get("ingredient", ""),
+                    "substitute": item.get("substitute", "N/A"),
+                    "ratio": item.get("ratio", "N/A"),
+                    "flavour_note": item.get("flavour_note", "N/A"),
+                    "tip": item.get("tip", "N/A"),
+                })
 
-    except Exception as e:
-        # Catch-all for API errors, network issues, rate limits, etc.
-        return {"error": f"Gemini API call failed: {e}"}
+            if validated:
+                return validated
+
+            # If no valid items, retry
+            continue
+
+        except json.JSONDecodeError:
+            # Retry on parse failure
+            if attempt < max_attempts - 1:
+                continue
+            return {"error": "Gemini returned an invalid response. Please try again."}
+
+        except Exception as e:
+            return {"error": f"Gemini API call failed: {e}"}
+
+    return {"error": "Gemini returned an invalid response after retrying. Please try again."}

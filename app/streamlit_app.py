@@ -63,6 +63,33 @@ st.markdown(f"""
         background-color: {CREAM};
     }}
 
+    /* ---- Force body text colour on all Streamlit elements ---- */
+    .stMarkdown, .stMarkdown p, .stMarkdown li,
+    .stMarkdown em, .stMarkdown strong,
+    .stCheckbox label, .stCheckbox label span,
+    [data-testid="stText"],
+    [data-testid="stMarkdownContainer"] p,
+    [data-testid="stMarkdownContainer"] em,
+    [data-testid="stMarkdownContainer"] li {{
+        color: {CHARCOAL} !important;
+        font-family: 'Roboto Mono', monospace !important;
+    }}
+
+    /* ---- Keep button text colours intact ---- */
+    .stButton > button,
+    .stButton > button span,
+    .stButton > button p {{
+        color: inherit !important;
+    }}
+    .stButton > button[kind="primary"] span,
+    .stButton > button[data-testid="stBaseButton-primary"] span {{
+        color: {CREAM} !important;
+    }}
+    .stButton > button[kind="secondary"] span,
+    .stButton > button[data-testid="stBaseButton-secondary"] span {{
+        color: {CREAM} !important;
+    }}
+
     /* ---- Hide default sidebar toggle ---- */
     [data-testid="stSidebarCollapsedControl"] {{
         display: none;
@@ -198,14 +225,14 @@ st.markdown(f"""
         font-family: 'Roboto Mono', monospace;
         font-weight: 600;
         font-size: 0.95rem;
-        color: {CREAM};
+        color: {CREAM} !important;
         margin: 0.6rem 0 0.25rem 0;
         line-height: 1.3;
     }}
     .recipe-card .card-time {{
         font-family: 'Roboto Mono', monospace;
         font-size: 0.8rem;
-        color: {GOLD};
+        color: {GOLD} !important;
         margin-bottom: 0.5rem;
     }}
 
@@ -352,14 +379,22 @@ if st.session_state.selected_recipe is not None:
                     user_query=user_query,
                 )
 
-            if "error" in result:
+            # Single error dict
+            if isinstance(result, dict) and "error" in result:
                 st.error(f"AI error: {result['error']}")
             else:
-                with st.container(border=True):
-                    st.markdown(f"### {result.get('substitute', 'N/A')}")
-                    st.markdown(f"**How much:** {result.get('ratio', 'N/A')}")
-                    st.markdown(f"**Flavour note:** {result.get('flavour_note', 'N/A')}")
-                    st.markdown(f"**Tip:** {result.get('tip', 'N/A')}")
+                # result is a list of substitution dicts
+                for sub in result:
+                    with st.container(border=True):
+                        label = sub.get("ingredient", "")
+                        heading = sub.get("substitute", "N/A")
+                        if label:
+                            st.markdown(f"### {label} → {heading}")
+                        else:
+                            st.markdown(f"### {heading}")
+                        st.markdown(f"**How much:** {sub.get('ratio', 'N/A')}")
+                        st.markdown(f"**Flavour note:** {sub.get('flavour_note', 'N/A')}")
+                        st.markdown(f"**Tip:** {sub.get('tip', 'N/A')}")
 
     # Source link
     if recipe.get("url"):
