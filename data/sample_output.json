@@ -1,38 +1,36 @@
 {
-  "restaurant_name": "Tanpopo Ramen House",
-  "neighbourhood": "Mount Pleasant",
-  "osm_id": 1234567890,
-  "address": "123 Main St, Vancouver",
-  "website": "https://www.tanpoporamen.example.com",
-  "ai_summary": {
-    "top_dishes": [
-      {
-        "dish": "Tonkotsu Ramen",
-        "description": "Rich, creamy pork bone broth simmered for 12 hours with chashu and soft-boiled egg"
-      },
-      {
-        "dish": "Spicy Miso Ramen",
-        "description": "Bold fermented soybean broth with a fiery chili kick and ground pork"
-      },
-      {
-        "dish": "Chicken Karaage",
-        "description": "Crispy Japanese-style fried chicken, perfectly seasoned and juicy inside"
-      },
-      {
-        "dish": "Gyoza (Pan-fried)",
-        "description": "Handmade pork and cabbage dumplings with a crispy golden bottom"
-      },
-      {
-        "dish": "Matcha Soft Serve",
-        "description": "Creamy green tea ice cream — a refreshing finish to a hearty bowl"
-      }
+  "recipe": {
+    "id": 1,
+    "title": "Creamy Garlic Penne Pasta",
+    "url": "https://www.allrecipes.com/recipe/11691/creamy-garlic-penne-pasta/",
+    "ingredients": [
+      "1 (16 ounce) package penne pasta",
+      "2 tablespoons butter",
+      "4 cloves garlic, minced",
+      "2 tablespoons all-purpose flour",
+      "1 cup milk",
+      "1 cup heavy cream",
+      "0.75 cup grated Parmesan cheese",
+      "salt and pepper to taste"
     ],
-    "vibe": "A cozy, no-frills ramen shop with communal seating and steamy bowls served fast.",
-    "practical_tips": [
-      "Expect a 15-20 minute wait during weekend lunch rush",
-      "Cash and card accepted, no reservations — first come first served",
-      "Street parking is limited; consider transit (Main St-Science World Station nearby)"
+    "instructions": [
+      "Bring a large pot of lightly salted water to a boil. Cook penne in the boiling water until tender yet firm to the bite, about 11 minutes. Drain.",
+      "Melt butter in a saucepan over medium heat. Cook and stir garlic in melted butter until softened, about 2 minutes.",
+      "Stir flour into garlic and butter until combined; slowly stream milk and cream into flour mixture while continuously stirring.",
+      "Cook sauce until thickened, about 5 minutes. Stir Parmesan cheese, salt, and pepper into sauce until cheese is melted, about 2 minutes more.",
+      "Toss cooked penne pasta with sauce to coat."
     ],
-    "price_range": "$"
+    "image_url": "https://example.com/pasta.jpg",
+    "cuisine": null,
+    "total_time": "30"
+  },
+  "ai_substitution_example": {
+    "user_query": "I don't have heavy cream, what can I use?",
+    "response": {
+      "substitute": "Full-fat coconut milk",
+      "ratio": "Use the same amount (1 cup)",
+      "flavour_note": "Adds a subtle coconut undertone, but the richness and creaminess will be very similar.",
+      "tip": "Shake the can well before opening, and add it slowly while stirring to prevent separation."
+    }
   }
 }
