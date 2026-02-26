@@ -522,14 +522,22 @@ else:
         # If nothing found locally, search AllRecipes.com live.
         # This scrapes the search results page, extracts recipe URLs,
         # scrapes each one, stores them in SQLite, and returns them.
+        # NOTE: Live scraping may fail on cloud hosts (e.g. Streamlit Cloud)
+        # because AllRecipes blocks data-centre IPs. In that case, the app
+        # falls back to showing the "not found" message below.
         if not results:
             with st.spinner(f"Searching AllRecipes.com for \"{search_query}\"..."):
                 results = search_allrecipes_live(search_query)
 
         if not results:
             st.info(
-                f"No recipes found for **\"{search_query}\"** on AllRecipes. "
-                "Try different keywords!"
+                f"No recipes found for **\"{search_query}\"**. "
+                "Try a broader keyword like \"chicken\", \"pasta\", or \"soup\"."
+            )
+            st.caption(
+                "💡 Live scraping may be limited on cloud-hosted deployments. "
+                "The app includes a pre-loaded collection of 75+ recipes — "
+                "try searching within those!"
             )
         else:
             # Custom styled success bar (green #698F3F with white text)
