@@ -9,19 +9,6 @@ __pycache__/
 # macOS
 .DS_Store
 
-# Raw data files
-/data/raw/
-
-# SQLite database
-recipes.db
-
-# Data files
-*.csv
-*.xlsx
-
-# Jupyter
-.ipynb_checkpoints/
-
 # Virtual environments
 venv/
 .venv/
