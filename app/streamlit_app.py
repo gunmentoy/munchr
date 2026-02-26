@@ -2,52 +2,83 @@
 Munchr — Streamlit Web App
 Your AI-powered cooking companion.
 
+This is the main entry point of the Munchr app. It uses Streamlit to
+render a single-page web app with two views:
+  1. Search View (default) — hero title, search bar, recipe card grid
+  2. Recipe Detail View    — full recipe with ingredients, instructions, and AI assistant
+
+The app uses custom CSS to override Streamlit’s default styling with:
+  - Roboto Mono font (Google Fonts)
+  - A custom colour palette: crimson, gold, cream, and charcoal
+  - Styled buttons, cards, inputs, and success bars
+
 Run with:  streamlit run app/streamlit_app.py
 """
 
 import sys
 import os
 
-# Add the project root to the Python path so we can import sibling packages
-# (scraper/ and ai/) when running from the app/ directory
+# --- Path Setup ---
+# Streamlit runs this file from the app/ directory, but we need to import
+# modules from sibling directories (scraper/ and ai/). This adds the project
+# root to Python’s module search path so those imports work.
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import streamlit as st
+
+# Import functions from our custom modules:
+# - recipe_scraper: handles database queries and live AllRecipes scraping
+# - gemini_assistant: handles AI-powered ingredient substitution suggestions
 from scraper.recipe_scraper import (
-    search_recipes,
-    search_allrecipes_live,
-    get_random_recipe,
-    get_recipe_count,
-    init_db,
+    search_recipes,           # Search the local SQLite database
+    search_allrecipes_live,   # Search AllRecipes.com live and cache results
+    get_random_recipe,        # Get one random recipe from the database
+    get_recipe_count,         # Count total recipes in the database
+    init_db,                  # Ensure the database and table exist
 )
-from ai.gemini_assistant import suggest_substitutes
+from ai.gemini_assistant import suggest_substitutes  # AI substitution suggestions
 
 
 # ---------------------------------------------------------------------------
 # Colour palette
+# These are used both in the CSS block below and in some inline HTML.
 # ---------------------------------------------------------------------------
-CRIMSON = "#AF1B3F"
-GOLD = "#EC9A29"
-CREAM = "#E8EDDF"
-CHARCOAL = "#242423"
+CRIMSON  = "#AF1B3F"   # Primary accent — headings, primary buttons
+GOLD     = "#EC9A29"   # Secondary accent — hover states, cook time, dividers
+CREAM    = "#E8EDDF"   # Background colour for the entire app
+CHARCOAL = "#242423"   # Text colour + recipe card backgrounds
 
 
 # ---------------------------------------------------------------------------
 # Page configuration
+# This must be the first Streamlit command (before any other st.* calls).
 # ---------------------------------------------------------------------------
 st.set_page_config(
-    page_title="Munchr",
-    page_icon="🍜",
-    layout="wide",
-    initial_sidebar_state="collapsed",
+    page_title="Munchr",                  # Browser tab title
+    layout="wide",                         # Use full screen width
+    initial_sidebar_state="collapsed",     # Hide sidebar (we don’t use one)
 )
 
-# Ensure the database exists
+# Ensure the SQLite database file and table exist before any queries.
+# This is safe to call multiple times (CREATE TABLE IF NOT EXISTS).
 init_db()
 
 
 # ---------------------------------------------------------------------------
 # Custom CSS — Roboto Mono + colour palette
+#
+# This large block injects custom CSS into the Streamlit app to override
+# default styles. It covers:
+#   - Global font (Roboto Mono) and background colour
+#   - Styled text inputs with charcoal background and cream text
+#   - Primary/secondary button colours matching the palette
+#   - Recipe cards (charcoal background, rounded corners, hover shadow)
+#   - Hero title and subtitle sizing/alignment
+#   - Custom green success bar
+#   - Footer styling
+#
+# The f-string lets us use Python colour constants (CRIMSON, GOLD, etc.)
+# directly inside the CSS so the palette is defined in one place.
 # ---------------------------------------------------------------------------
 st.markdown(f"""
 <style>
@@ -126,7 +157,7 @@ st.markdown(f"""
     /* ---- Secondary buttons (View Recipe, Back, Feeling Hungry) ---- */
     .stButton > button[kind="secondary"],
     .stButton > button[data-testid="stBaseButton-secondary"] {{
-        background-color: {CHARCOAL} !important;
+        background-color: {GOLD} !important;
         color: {CREAM} !important;
         border: none !important;
         border-radius: 8px !important;
@@ -136,8 +167,8 @@ st.markdown(f"""
     }}
     .stButton > button[kind="secondary"]:hover,
     .stButton > button[data-testid="stBaseButton-secondary"]:hover {{
-        background-color: {GOLD} !important;
-        color: {CHARCOAL} !important;
+        background-color: {CHARCOAL} !important;
+        color: {GOLD} !important;
     }}
 
     /* ---- Text inputs ---- */
@@ -257,14 +288,15 @@ st.markdown(f"""
         font-family: 'Roboto Mono', monospace !important;
     }}
 
-    /* ---- Hero title styling ---- */
+    /* ---- Hero section styling ---- */
     .hero-title {{
         font-family: 'Roboto Mono', monospace;
-        font-size: 3.2rem;
+        font-size: 5rem;
         font-weight: 700;
         color: {CRIMSON};
         margin-bottom: 0;
         letter-spacing: -1px;
+        text-align: center;
     }}
     .hero-subtitle {{
         font-family: 'Roboto Mono', monospace;
@@ -272,6 +304,7 @@ st.markdown(f"""
         color: {CHARCOAL};
         opacity: 0.7;
         margin-top: 0;
+        text-align: center;
     }}
     .recipe-count {{
         font-family: 'Roboto Mono', monospace;
@@ -298,58 +331,77 @@ st.markdown(f"""
 
 
 # ---------------------------------------------------------------------------
-# Session state — tracks which recipe is being viewed
+# Session state — tracks which recipe the user is currently viewing
+#
+# Streamlit reruns the entire script on every interaction (button click,
+# text input, etc.). Session state persists data across those reruns.
+# We use it to track whether the user is on the search page or viewing
+# a specific recipe.
+#
+# selected_recipe = None  → show the search view
+# selected_recipe = {...} → show the recipe detail view
 # ---------------------------------------------------------------------------
 if "selected_recipe" not in st.session_state:
     st.session_state.selected_recipe = None
 
 
 def select_recipe(recipe: dict):
-    """Set the selected recipe in session state."""
+    """Store the clicked recipe in session state to navigate to the detail view."""
     st.session_state.selected_recipe = recipe
 
 
 def clear_selection():
-    """Return to the search view."""
+    """Clear the selected recipe to return to the search view."""
     st.session_state.selected_recipe = None
 
 
 # ---------------------------------------------------------------------------
 # Recipe Detail View
+#
+# This view is shown when the user clicks "View Recipe" on a card.
+# It displays the full recipe: title, image, cook time, ingredient
+# checkboxes, numbered instructions, and the AI substitution assistant.
 # ---------------------------------------------------------------------------
 if st.session_state.selected_recipe is not None:
     recipe = st.session_state.selected_recipe
 
-    # Back button
+    # Back button — clears the selection and reruns the app to show search view
     if st.button("← Back to Search"):
         clear_selection()
         st.rerun()
 
-    # Recipe title
+    # --- Recipe header ---
     st.title(recipe["title"])
 
-    # Recipe image — capped width for readability
+    # Recipe image — displayed in a 2:1 column layout so it doesn’t stretch
+    # across the full wide layout (looks better with capped width)
     if recipe.get("image_url"):
         col_img, _ = st.columns([2, 1])
         with col_img:
             st.image(recipe["image_url"], use_container_width=True)
 
-    # Cook time
+    # Cook time (if available in the scraped data)
     if recipe.get("total_time"):
         st.caption(f"⏱️ Total time: {recipe['total_time']} minutes")
 
     st.divider()
 
-    # Two-column layout: ingredients (left) + instructions (right)
+    # --- Two-column layout: ingredients on the left, instructions on the right ---
+    # The [1, 2] ratio makes instructions take up 2/3 of the width since
+    # they contain more text than the ingredient list.
     col_left, col_right = st.columns([1, 2])
 
     with col_left:
         st.subheader("Ingredients")
+        # Each ingredient is rendered as a checkbox so users can tick them
+        # off as they cook. The key must be unique per ingredient per recipe
+        # to avoid Streamlit duplicate key errors.
         for i, ingredient in enumerate(recipe.get("ingredients", [])):
             st.checkbox(ingredient, key=f"ing_{recipe['id']}_{i}")
 
     with col_right:
         st.subheader("Instructions")
+        # Numbered steps — rendered as bold numbers followed by step text
         for i, step in enumerate(recipe.get("instructions", []), start=1):
             st.markdown(f"**{i}.** {step}")
 
@@ -357,14 +409,19 @@ if st.session_state.selected_recipe is not None:
 
     # ------------------------------------------------------------------
     # AI Assistant section
+    #
+    # This section lets users ask about ingredient substitutions.
+    # It sends the recipe context + user question to Gemini AI and
+    # displays the structured response as cards.
     # ------------------------------------------------------------------
     st.subheader("Ask Munchr AI")
     st.markdown("*Missing an ingredient? Ask for a substitute.*")
 
+    # Text input for the user’s substitution question
     user_query = st.text_input(
         "Your question",
         placeholder="e.g. I don't have heavy cream, what can I use?",
-        label_visibility="collapsed",
+        label_visibility="collapsed",  # Hide the label, placeholder is enough
         key="ai_query",
     )
 
@@ -372,6 +429,7 @@ if st.session_state.selected_recipe is not None:
         if not user_query:
             st.warning("Type a question first!")
         else:
+            # Show a spinner while waiting for the Gemini API response
             with st.spinner("Asking Munchr AI..."):
                 result = suggest_substitutes(
                     recipe_title=recipe["title"],
@@ -379,13 +437,16 @@ if st.session_state.selected_recipe is not None:
                     user_query=user_query,
                 )
 
-            # Single error dict
+            # suggest_substitutes() returns either:
+            #   - A list of dicts (success) — one per ingredient substitution
+            #   - A single dict with "error" key (failure)
             if isinstance(result, dict) and "error" in result:
                 st.error(f"AI error: {result['error']}")
             else:
-                # result is a list of substitution dicts
+                # Display each substitution as a bordered card
                 for sub in result:
                     with st.container(border=True):
+                        # Show "ingredient → substitute" if the original ingredient is known
                         label = sub.get("ingredient", "")
                         heading = sub.get("substitute", "N/A")
                         if label:
@@ -396,25 +457,33 @@ if st.session_state.selected_recipe is not None:
                         st.markdown(f"**Flavour note:** {sub.get('flavour_note', 'N/A')}")
                         st.markdown(f"**Tip:** {sub.get('tip', 'N/A')}")
 
-    # Source link
+    # Link back to the original AllRecipes page
     if recipe.get("url"):
         st.markdown(f"[View original on AllRecipes →]({recipe['url']})")
 
 
 # ---------------------------------------------------------------------------
 # Search View (default)
+#
+# This is the landing page — shown when no recipe is selected.
+# It displays the hero title, search bar, and two action buttons.
+# When the user searches, it first checks the local SQLite database
+# for instant results. If nothing is found, it falls back to a live
+# search on AllRecipes.com (which also caches the results locally).
 # ---------------------------------------------------------------------------
 else:
-    # Hero header
+    # --- Hero header ---
     st.markdown('<p class="hero-title">Munchr</p>', unsafe_allow_html=True)
     st.markdown(
         '<p class="hero-subtitle">your ai-powered cooking companion</p>',
         unsafe_allow_html=True,
     )
 
-    st.markdown("")  # spacer
+    st.markdown("")  # Visual spacer
 
-    # Search bar
+    # --- Search bar ---
+    # label_visibility="collapsed" hides the label but keeps it accessible
+    # for screen readers. The placeholder text guides the user.
     search_query = st.text_input(
         "Search recipes",
         placeholder="search anything... chicken tikka, szechuan beef, banana bread",
@@ -422,32 +491,37 @@ else:
         key="search_bar",
     )
 
-    # Buttons: Search + I'm Feeling Hungry side by side
+    # --- Action buttons: Search + I'm Feeling Hungry side by side ---
     btn_col1, btn_col2 = st.columns(2)
     with btn_col1:
         search_clicked = st.button(
             "Search", type="primary", use_container_width=True
         )
     with btn_col2:
+        # "I'm Feeling Hungry" picks a random recipe from the local database
         feeling_hungry = st.button(
             "I'm Feeling Hungry", use_container_width=True
         )
 
-    # Handle "I'm Feeling Hungry"
+    # --- Handle "I'm Feeling Hungry" button ---
+    # Picks a random recipe from SQLite and navigates to its detail view
     if feeling_hungry:
         random_recipe = get_random_recipe()
         if random_recipe:
             select_recipe(random_recipe)
-            st.rerun()
+            st.rerun()  # Rerun the script to switch to the detail view
         else:
             st.warning("No recipes yet — try searching for something first!")
 
-    # Handle search
+    # --- Handle search ---
     if search_clicked and search_query:
-        # Check local DB first
+        # First, check the local SQLite database for instant results.
+        # This is fast because it’s just a local SQL query.
         results = search_recipes(search_query)
 
-        # If nothing local, search AllRecipes.com live
+        # If nothing found locally, search AllRecipes.com live.
+        # This scrapes the search results page, extracts recipe URLs,
+        # scrapes each one, stores them in SQLite, and returns them.
         if not results:
             with st.spinner(f"Searching AllRecipes.com for \"{search_query}\"..."):
                 results = search_allrecipes_live(search_query)
@@ -458,16 +532,23 @@ else:
                 "Try different keywords!"
             )
         else:
+            # Custom styled success bar (green #698F3F with white text)
             st.markdown(
                 f'<div class="success-bar">Found {len(results)} recipe(s)</div>',
                 unsafe_allow_html=True,
             )
 
-            # 3-column recipe card grid
+            # --- 3-column recipe card grid ---
+            # Each recipe is rendered as a styled charcoal card with:
+            # - Cropped thumbnail image (fixed 200px height)
+            # - Recipe title in cream
+            # - Cook time in gold
+            # - "View Recipe" button underneath
             cols = st.columns(3)
             for i, recipe in enumerate(results):
+                # i % 3 distributes cards across 3 columns evenly
                 with cols[i % 3]:
-                    # Image HTML
+                    # Build the card HTML with conditional image and time
                     img_html = ""
                     if recipe.get("image_url"):
                         img_html = (
@@ -480,6 +561,7 @@ else:
                     if recipe.get("total_time"):
                         time_html = f'<div class="card-time">⏱️ {recipe["total_time"]} min</div>'
 
+                    # Render the styled card as raw HTML
                     st.markdown(
                         f'<div class="recipe-card">'
                         f'{img_html}'
@@ -490,12 +572,14 @@ else:
                         unsafe_allow_html=True,
                     )
 
-                    # Button sits right below card with highlighted styling
+                    # "View Recipe" button — uses on_click callback to store
+                    # the recipe in session state, then Streamlit reruns and
+                    # switches to the detail view.
                     with st.container():
                         st.markdown('<div class="card-btn-wrap">', unsafe_allow_html=True)
                         st.button(
                             "View Recipe",
-                            key=f"view_{recipe['id']}",
+                            key=f"view_{recipe['id']}",  # Unique key per recipe
                             on_click=select_recipe,
                             args=(recipe,),
                             use_container_width=True,
@@ -508,6 +592,7 @@ else:
 
 # ---------------------------------------------------------------------------
 # Footer
+# Attribution for data sources and AI model used.
 # ---------------------------------------------------------------------------
 st.markdown(
     '<div class="footer">'
