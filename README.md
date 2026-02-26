@@ -12,7 +12,7 @@ Munchr is a recipe search and AI substitution assistant built with Python and St
 
 | Feature | Description |
 |---|---|
-| **Live Recipe Search** | Search AllRecipes.com in real time — results are scraped, parsed, and cached locally in SQLite |
+| **Live Recipe Search** | Search AllRecipes.com in real time. Results are scraped, parsed, and cached locally in SQLite |
 | **Local Database** | Recipes are stored after the first search so subsequent lookups are instant |
 | **"I'm Feeling Hungry"** | Click once and get a random recipe from your local collection |
 | **AI Ingredient Substitutions** | Ask Munchr AI what to use when you're missing an ingredient — powered by Google Gemini |
